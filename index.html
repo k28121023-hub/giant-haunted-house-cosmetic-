@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>勇者闖巨大化鬼屋：Haunted Lexicon</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      background: #000;
+      color: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100vw;
+      /* 使用 dvh 避免手機瀏覽器工具列遮擋，fallback 為 100vh */
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden; /* 禁止捲動 */
+      padding: 0;
+      margin: 0;
+    }
+
+    .game-shell {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: radial-gradient(circle at center, #1a1e29, #000 80%);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 遊戲畫布：保持比例，最大化顯示 */
+    canvas {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      aspect-ratio: 900 / 560;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+      cursor: crosshair;
+      /* 確保畫布在正中間 */
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1;
+    }
+
+    /* === HUD (抬頭顯示器) - 遊戲中顯示 === */
+    #hud-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none; /* 讓點擊穿透到 Canvas */
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .hud-top-bar {
+      background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0));
+      padding: 10px 20px 40px 20px;
+      text-align: center;
+      pointer-events: auto;
+    }
+
+    #current-question-text {
+      font-size: 24px;
+      font-weight: bold;
+      color: #ffd700;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+      margin: 4px 0;
+    }
+
+    #instruction-sub {
+      font-size: 14px;
+      color: #a0aaff;
+      opacity: 0.9;
+    }
+
+    .status-badges {
+      display: inline-flex;
+      gap: 10px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: #ccc;
+      background: rgba(0,0,0,0.3);
+      padding: 4px 8px;
+      border-radius: 12px;
+    }
+
+    /* === 選單覆蓋層 (Menu Overlay) - 開始/暫停/結束時顯示 === */
+    #menu-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 20;
+      background: rgba(10, 12, 20, 0.85);
+      backdrop-filter: blur(5px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      transition: opacity 0.3s ease;
+    }
+
+    /* 當遊戲進行時隱藏選單 */
+    #menu-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .menu-card {
+      background: rgba(30, 35, 50, 0.95);
+      padding: 24px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.7);
+      max-width: 90%;
+      width: 400px;
+    }
+
+    .menu-title h1 {
+      font-size: 28px;
+      margin: 0;
+      color: #fff;
+      letter-spacing: 2px;
+    }
+    .menu-title .subtitle {
+      color: #b6c1ff;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+
+    #message {
+      font-size: 15px;
+      color: #e0e6ff;
+      margin-bottom: 20px;
+      line-height: 1.5;
+      min-height: 24px;
+    }
+
+    #startBtn {
+      width: 100%;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 50px;
+      border: none;
+      background: linear-gradient(135deg, #5c7cff, #9f6bff);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(92, 124, 255, 0.4);
+      transition: transform 0.1s ease;
+    }
+    #startBtn:active { transform: scale(0.96); }
+
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-top: 16px;
+      font-size: 12px;
+      color: #aaa;
+    }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    /* === 手機專用射擊按鈕 (Floating Action Button) === */
+    #mobile-controls {
+      position: absolute;
+      /* 確保距離邊緣足夠遠，避免被切到 */
+      bottom: 60px; 
+      right: 40px;
+      z-index: 30; /* 最高層級 */
+    }
+
+    #mobileFireBtn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: rgba(255, 215, 0, 0.4); /* 稍微增加不透明度 */
+      border: 4px solid #ffd700;
+      color: #ffd700;
+      font-size: 32px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+      backdrop-filter: blur(2px);
+      transition: all 0.1s;
+      user-select: none;
+      touch-action: none; 
+    }
+
+    #mobileFireBtn:active {
+      background: rgba(255, 215, 0, 0.8);
+      color: #fff;
+      transform: scale(0.92);
+    }
+
+    /* 手機直式優化 */
+    @media (max-width: 600px) {
+      #current-question-text { font-size: 20px; }
+      .hud-top-bar { padding: 10px 10px 30px 10px; }
+      /* 手機版按鈕位置優化 */
+      #mobile-controls { bottom: 50px; right: 30px; }
+      #mobileFireBtn { width: 75px; height: 75px; font-size: 28px; }
+      canvas { width: 100%; height: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="game-shell">
+    
+    <!-- 遊戲畫布 -->
+    <canvas id="gameCanvas" width="900" height="560"></canvas>
+
+    <!-- HUD 層 (遊戲中常駐顯示) -->
+    <div id="hud-layer">
+      <div class="hud-top-bar">
+        <div id="instruction-sub">任務目標：接住正確答案</div>
+        <div id="current-question-text">準備開始</div>
+        <div class="status-badges">
+          <span id="levelLabel">Level 1</span>
+          <span>|</span>
+          <span id="progressLabel">0/10</span>
+        </div>
+      </div>
+      <!-- 底部保留空間給射擊按鈕 -->
+    </div>
+
+    <!-- 選單層 (開始/暫停/結束) -->
+    <div id="menu-overlay">
+      <div class="menu-card">
+        <div class="menu-title">
+          <h1>賢者闖鬼屋</h1>
+          <div class="subtitle">Haunted Lexicon</div>
+        </div>
+        
+        <div id="message">按下開始，接住正確單字，發射魔法光波！</div>
+        
+        <button id="startBtn">開始挑戰</button>
+        
+        <div class="legend">
+           <div class="legend-item"><div class="dot" style="background:#fff; border:1px solid #aaa"></div>接正確字</div>
+           <div class="legend-item"><div class="dot" style="background:#ff4d4d"></div>射擊火球</div>
+           <div class="legend-item"><div class="dot" style="background:#c0d4ff"></div>射擊幽靈</div>
+        </div>
+        <div style="font-size:12px; color:#666; margin-top:10px;">(電腦按空白鍵 / 手機按右下角)</div>
+      </div>
+    </div>
+
+    <!-- 懸浮操作按鈕 -->
+    <div id="mobile-controls">
+      <div id="mobileFireBtn">🏹</div>
+    </div>
+
+  </div>
+
+  <script>
+    // ====== 基本設定 ======
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const messageEl = document.getElementById("message");
+    const questionTextEl = document.getElementById("current-question-text");
+    const instructionSubEl = document.getElementById("instruction-sub");
+    const startBtn = document.getElementById("startBtn");
+    const levelLabel = document.getElementById("levelLabel");
+    const progressLabel = document.getElementById("progressLabel");
+    const mobileFireBtn = document.getElementById("mobileFireBtn");
+    const menuOverlay = document.getElementById("menu-overlay");
+
+    let WIDTH = 900;
+    let HEIGHT = 560;
+
+    // ====== 圖片資源設定 (可替換) ======
+    const imagePaths = {
+      player: "shooter.png", 
+      ghost: "ghost.png",  
+      boss: "king.png",
+      santa: "santa.png" 
+    };
+
+    const defaultSvg = {
+      player: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%235c7cff' d='M32 2L10 20v40h44V20L32 2z'/%3E%3Ccircle cx='32' cy='28' r='10' fill='%23f8e0c8'/%3E%3Cpath fill='%238a2be2' d='M32 2L16 20h32L32 2z'/%3E%3Cpath stroke='%23ffd700' stroke-width='3' d='M44 36l12-8M44 36l12 8'/%3E%3C/svg%3E",
+      ghost: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath fill='%23c0d4ff' d='M32 2C15.4 2 2 15.4 2 32v20l10-6 10 6 10-6 10 6 10-6 10 6V32c0-16.6-13.4-30-30-30z' opacity='0.9'/%3E%3Ccircle cx='22' cy='24' r='4' fill='%2327304a'/%3E%3Ccircle cx='42' cy='24' r='4' fill='%2327304a'/%3E%3C/svg%3E",
+      boss: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='45' fill='%23ff3333'/%3E%3Cpath fill='%23ffd700' d='M20 30l10-20 20 15 20-15 10 20z'/%3E%3Ccircle cx='35' cy='55' r='6' fill='%2300ffff'/%3E%3Ccircle cx='65' cy='55' r='6' fill='%2300ffff'/%3E%3Cpath stroke='%23330000' stroke-width='4' fill='none' d='M30 75q20 15 40 0'/%3E%3C/svg%3E",
+      santa: "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 60'%3E%3C!-- Runners --%3E%3Cpath d='M10,50 L110,50' stroke='%23C0C0C0' stroke-width='3'/%3E%3Cpath d='M10,50 Q5,40 15,40' stroke='%23C0C0C0' stroke-width='3' fill='none'/%3E%3C!-- Sleigh Body --%3E%3Cpath d='M20,45 L100,45 Q110,45 110,35 L100,25 L30,25 Q20,25 20,45 Z' fill='%23cc0000'/%3E%3C!-- Gold Trim --%3E%3Cpath d='M20,30 L100,30' stroke='%23ffd700' stroke-width='2'/%3E%3C!-- Bag --%3E%3Ccircle cx='40' cy='20' r='14' fill='%238B4513'/%3E%3C!-- Santa Body --%3E%3Ccircle cx='80' cy='25' r='12' fill='%23cc0000'/%3E%3C!-- Santa Head --%3E%3Ccircle cx='80' cy='15' r='8' fill='%23ffe0bd'/%3E%3C!-- Hat --%3E%3Cpath d='M72,12 Q80,-5 88,12' fill='%23cc0000'/%3E%3Ccircle cx='88' cy='12' r='3' fill='white'/%3E%3C!-- Beard --%3E%3Cpath d='M74,18 Q80,28 86,18' fill='white'/%3E%3C/svg%3E"
+    };
+
+    const assets = {
+      player: new Image(),
+      ghost: new Image(), 
+      boss: new Image(),
+      santa: new Image()
+    };
+
+    function loadGameImages() {
+      assets.player.onerror = () => { assets.player.src = defaultSvg.player; };
+      assets.player.src = imagePaths.player;
+
+      assets.ghost.onerror = () => { assets.ghost.src = defaultSvg.ghost; };
+      assets.ghost.src = imagePaths.ghost;
+
+      assets.boss.onerror = () => { assets.boss.src = defaultSvg.boss; };
+      assets.boss.src = imagePaths.boss;
+
+      assets.santa.onerror = () => { assets.santa.src = defaultSvg.santa; };
+      assets.santa.src = imagePaths.santa;
+    }
+
+    loadGameImages();
+
+    // ====== 題庫 ======
+    
+    // 第一關：服飾與配件
+    const vocabQuestions = [
+      { zh: "短衣", en: "T-shirt", options: ["T-shirt", "shirt", "short", "sheet"] },
+      { zh: "洋裝", en: "dress", options: ["dress", "desk", "press", "address"] },
+      { zh: "牛仔褲", en: "jeans", options: ["jeans", "beans", "means", "teens"] },
+      { zh: "長褲", en: "pants", options: ["pants", "plants", "plans", "pain"] },
+      { zh: "襯衫", en: "shirt", options: ["shirt", "skirt", "short", "shift"] },
+      { zh: "皮帶", en: "belt", options: ["belt", "bell", "felt", "bolt"] },
+      { zh: "正裝鞋", en: "dress shoes", options: ["dress shoes", "sneakers", "boots", "sandals"] },
+      { zh: "領帶", en: "tie", options: ["tie", "pie", "lie", "die"] }, 
+      { zh: "夾克", en: "jacket", options: ["jacket", "pocket", "rocket", "packet"] },
+      { zh: "毛衣", en: "sweater", options: ["sweater", "weather", "better", "water"] },
+      { zh: "靴子", en: "boots", options: ["boots", "boats", "books", "roots"] },
+      { zh: "無袖上衣", en: "tank top", options: ["tank top", "laptop", "rooftop", "tip top"] },
+      { zh: "短褲", en: "shorts", options: ["shorts", "sports", "sorts", "shirts"] },
+      { zh: "女用套裝", en: "blouse", options: ["blouse", "mouse", "house", "browse"] },
+      { zh: "裙子", en: "skirt", options: ["skirt", "shirt", "skin", "skill"] },
+      { zh: "西裝", en: "suit", options: ["suit", "fruit", "seat", "salt"] },
+      { zh: "涼鞋", en: "sandals", options: ["sandals", "candles", "vandals", "handles"] },
+    ];
+
+    // 第二關：衣服相關詞彙
+    const level2Questions = [
+      { zh: "衣服", en: "outfit", options: ["outfit", "outside", "output", "outlet"] },
+      { zh: "品牌", en: "brand", options: ["brand", "band", "grand", "blend"] },
+      { zh: "最新的", en: "latest", options: ["latest", "late", "last", "least"] },
+      { zh: "試穿", en: "try on", options: ["try on", "put on", "take off", "turn on"] },
+      { zh: "合身", en: "fit", options: ["fit", "fat", "bit", "hit"] },
+      { zh: "完美地", en: "perfectly", options: ["perfectly", "perfect", "partly", "plainly"] },
+      { zh: "慢跑", en: "jog", options: ["jog", "job", "dog", "log"] },
+      { zh: "鬆的", en: "loose", options: ["loose", "lose", "lost", "goose"] },
+    ];
+
+    // ====== 遊戲狀態 ======
+    const game = {
+      state: "menu", // menu, level1, level2, gameOver, victory
+      level: 0,
+      hp: 5,
+      maxHp: 5,
+      ghosts: [],
+      wordProjectiles: [], 
+      attackProjectiles: [], 
+      playerArrows: [], 
+      goldenWaves: [], 
+      effects: [], 
+      player: null,
+      boss: null,
+      currentQuestions: [],
+      currentIndex: 0,
+      lastTime: 0,
+      hitEffectTime: 0,
+      flashTime: 0,
+      touchTarget: null,
+      wordSpawnTimer: 0,
+      attackSpawnTimer: 0,
+      ghostSpawnTimer: 0, 
+    };
+
+    // ====== 工具函數 ======
+    function randRange(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function shuffleArray(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // ====== 物件創建 ======
+    function createPlayer() {
+      return {
+        x: WIDTH * 0.1,
+        y: HEIGHT * 0.5,
+        w: 80, 
+        h: 80, 
+        speed: 280,
+        vx: 0,
+        vy: 0,
+        attackCooldown: 0
+      };
+    }
+
+    function createGhost(isBossMinion = false) {
+      const x = randRange(WIDTH * 0.5, WIDTH - 50);
+      const y = randRange(60, HEIGHT - 60);
+      return {
+        x,
+        y,
+        r: 35, 
+        vx: randRange(-30, 30),
+        vy: randRange(-30, 30),
+        alpha: randRange(0.8, 1.0),
+        wobble: Math.random() * Math.PI * 2,
+        isBossMinion: isBossMinion,
+        attackCooldown: 0, 
+        hitFlash: 0,
+        hp: 1 // [新增] 幽靈有 HP，初始為 1
+      };
+    }
+
+    function createBoss() {
+      const bossHp = level2Questions.length; // Boss 血量等於題目數量
+      return {
+        x: WIDTH * 0.85,
+        y: HEIGHT * 0.5,
+        r: 140, 
+        vx: 0,
+        vy: 120,
+        maxHp: bossHp,
+        hp: bossHp,
+        attackCooldown: 1.5,
+        hitFlash: 0
+      };
+    }
+
+    function createPlayerArrow(x, y) {
+      return {
+        x: x,
+        y: y,
+        vx: 600, 
+        vy: 0,
+        w: 50, 
+        h: 6,
+        life: 2.0
+      };
+    }
+
+    function createGoldenWave(x, y, targetX, targetY) {
+      const angle = Math.atan2(targetY - y, targetX - x);
+      return {
+        x: x,
+        y: y,
+        speed: 600, 
+        vx: Math.cos(angle) * 600, 
+        vy: Math.sin(angle) * 600,
+        r: 30, 
+        angle: angle,
+        life: 5.0, 
+        homing: true 
+      };
+    }
+
+    function createEffect(x, y, color, size = 25) {
+      return {
+        x, y, color,
+        r: 2,
+        maxR: size,
+        alpha: 1.0,
+        life: 0.4
+      };
+    }
+
+    function createWordProjectile(sourceX, sourceY, targetX, targetY, text, isCorrect) {
+        const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
+        const speed = isCorrect ? 160 : 200; 
+        
+        const baseRadius = 32; 
+        const charWidthApprox = 14; 
+        const textWidth = text.length * charWidthApprox;
+        const radius = Math.max(baseRadius, (textWidth / 2) + 16);
+
+        return {
+            x: sourceX,
+            y: sourceY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            text: text,
+            isCorrect: isCorrect,
+            r: radius,
+            life: 6.0, 
+            type: 'word'
+        };
+    }
+
+    // [新增] 統一處理答對邏輯 (不管是接住還是射中)
+    function triggerCorrectAnswer(sourceX, sourceY) {
+        game.flashTime = 0.2;
+        game.currentIndex++;
+        game.wordProjectiles = []; // 清除場上所有單字
+
+        // 如果是第二關 Boss 戰，產生攻擊 Boss 的光波
+        if (game.level === 2 && game.boss) {
+             game.goldenWaves.push(createGoldenWave(sourceX, sourceY, game.boss.x, game.boss.y));
+        }
+        
+        // 檢查是否過關
+        if (game.currentIndex >= game.currentQuestions.length) {
+            if (game.level === 1) {
+                setTimeout(startLevel2, 500); 
+            } else {
+                messageEl.textContent = "最後一擊發射！";
+            }
+        } else {
+            updateQuestionDisplay();
+            updateUI("Nice! 下一題！", game.level === 1 ? "關卡 1" : "關卡 2", `${game.currentIndex} / ${game.currentQuestions.length}`);
+        }
+    }
+
+    // [修復] 之前遺失的 createAttackProjectile 函數
+    function createAttackProjectile(sourceX, sourceY, targetX, targetY, type) {
+        const angle = Math.atan2(targetY - sourceY, targetX - sourceX);
+        let speed, r, color;
+        
+        if (type === 'fire') {
+            speed = 350;
+            r = 12;
+            color = '#ff4d4d'; 
+        } else if (type === 'beam') {
+            speed = 450;
+            r = 18;
+            color = '#4da6ff'; 
+        }
+
+        return {
+            x: sourceX,
+            y: sourceY,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            r: r,
+            life: 3.0,
+            type: type,
+            color: color,
+            rotation: angle
+        };
+    }
+
+    // ====== 輸入控制 ======
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight", " "].indexOf(e.key) > -1) {
+        if (game.state === "level1" || game.state === "level2") e.preventDefault();
+      }
+      keys[e.key] = true;
+      
+      if (e.key === " " && (game.state === "level1" || game.state === "level2")) {
+        tryShoot();
+      }
+      game.touchTarget = null;
+    });
+    window.addEventListener("keyup", (e) => keys[e.key] = false);
+
+    function tryShoot() {
+        if (!game.player) return;
+        if (game.player.attackCooldown <= 0) {
+            game.playerArrows.push(createPlayerArrow(game.player.x + 20, game.player.y));
+            game.player.attackCooldown = 0.35; 
+            game.player.x = Math.max(30, game.player.x - 5);
+        }
+    }
+
+    // 手機射擊按鈕控制
+    mobileFireBtn.addEventListener("touchstart", (e) => {
+      e.preventDefault(); 
+      tryShoot();
+      mobileFireBtn.style.transform = "scale(0.9)";
+      mobileFireBtn.style.background = "rgba(255, 215, 0, 0.8)";
+    }, {passive: false});
+
+    mobileFireBtn.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      mobileFireBtn.style.transform = "scale(1)";
+      mobileFireBtn.style.background = "rgba(255, 215, 0, 0.5)";
+    }, {passive: false});
+
+
+    function handleTouch(e) {
+      if (game.state !== "level1" && game.state !== "level2") return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const touch = e.touches[0];
+      game.touchTarget = {
+        x: (touch.clientX - rect.left) * scaleX,
+        y: (touch.clientY - rect.top) * scaleY
+      };
+    }
+    canvas.addEventListener("touchstart", handleTouch, {passive: false});
+    canvas.addEventListener("touchmove", handleTouch, {passive: false});
+    canvas.addEventListener("touchend", (e) => {
+      e.preventDefault();
+      game.touchTarget = null;
+    });
+
+    // ====== 遊戲流程控制 ======
+    startBtn.addEventListener("click", () => {
+      startLevel1();
+    });
+
+    function toggleMenu(show) {
+      if(show) {
+        menuOverlay.classList.remove('hidden');
+      } else {
+        menuOverlay.classList.add('hidden');
+      }
+    }
+
+    function startLevel1() {
+      toggleMenu(false);
+      game.state = "level1";
+      game.level = 1;
+      game.hp = 5;
+      game.maxHp = 5;
+      game.player = createPlayer();
+      game.ghosts = [];
+      game.wordProjectiles = [];
+      game.attackProjectiles = [];
+      game.playerArrows = [];
+      game.goldenWaves = [];
+      game.effects = [];
+      for (let i = 0; i < 5; i++) game.ghosts.push(createGhost());
+      game.boss = null;
+      game.currentQuestions = shuffleArray(vocabQuestions);
+      game.currentIndex = 0;
+      game.wordSpawnTimer = 0;
+      game.ghostSpawnTimer = 0;
+      
+      updateQuestionDisplay();
+      updateUI("Level 1：按空白鍵(Space)射擊！", "Level 1", `1 / ${game.currentQuestions.length}`);
+    }
+
+    function startLevel2() {
+      game.state = "level2";
+      game.level = 2;
+      game.hp = game.maxHp; 
+      game.player = createPlayer();
+      game.ghosts = [];
+      game.wordProjectiles = [];
+      game.attackProjectiles = [];
+      game.playerArrows = [];
+      game.goldenWaves = [];
+      game.effects = [];
+      for (let i = 0; i < 2; i++) game.ghosts.push(createGhost(true));
+      game.boss = createBoss();
+      game.currentQuestions = shuffleArray(level2Questions);
+      game.currentIndex = 0;
+      game.wordSpawnTimer = 0;
+      game.ghostSpawnTimer = 0;
+
+      updateQuestionDisplay();
+      updateUI("Level 2 BOSS：接住正確單字發射光波！", "Level 2 BOSS", `1 / ${game.currentQuestions.length}`);
+    }
+
+    function updateQuestionDisplay() {
+        if(game.currentIndex >= game.currentQuestions.length) return;
+        
+        const q = game.currentQuestions[game.currentIndex];
+        
+        // [修改] 更新提示文字，強調必須射擊
+        instructionSubEl.textContent = "任務：射擊正確答案 (身體觸碰無效)";
+        questionTextEl.textContent = q.zh;
+        
+        questionTextEl.style.animation = "none";
+        questionTextEl.offsetHeight; 
+        questionTextEl.style.animation = "pulseText 0.5s";
+    }
+
+    function updateUI(msg, lvl, prog) {
+        messageEl.textContent = msg;
+        levelLabel.textContent = lvl;
+        progressLabel.textContent = prog;
+    }
+
+    function gameOver() {
+        game.state = "gameOver";
+        toggleMenu(true);
+        messageEl.textContent = "💀 挑戰失敗！你的精神力耗盡了...";
+        startBtn.textContent = "再試一次";
+    }
+
+    function victory() {
+        game.state = "victory";
+        toggleMenu(true);
+        messageEl.textContent = "🏆 恭喜！魔王已敗亡，賢者獲得了最終勝利！";
+        startBtn.textContent = "再次挑戰";
+    }
+
+    // ====== 遊戲邏輯 ======
+    function spawnWord() {
+        if(game.currentIndex >= game.currentQuestions.length) return; 
+
+        const q = game.currentQuestions[game.currentIndex];
+        const isCorrectTarget = Math.random() < 0.5;
+        let text = "";
+        
+        if (isCorrectTarget) {
+            text = q.en; 
+        } else {
+            const correct = q.en;
+            const wrongs = q.options.filter(o => o !== correct);
+            text = wrongs[Math.floor(Math.random() * wrongs.length)];
+        }
+
+        // [修改] 單字一律從右側螢幕外生成
+        const sourceX = WIDTH + 50;
+        const sourceY = randRange(50, HEIGHT - 50);
+
+        const targetX = game.player.x;
+        const targetY = game.player.y + randRange(-50, 50);
+
+        game.wordProjectiles.push(createWordProjectile(sourceX, sourceY, targetX, targetY, text, isCorrectTarget));
+    }
+
+    function respawnGhost() {
+        setTimeout(() => {
+            if (game.state === "level1" && game.ghosts.length < 5) {
+                game.ghosts.push(createGhost());
+            } else if (game.state === "level2" && game.ghosts.length < 3) {
+                 game.ghosts.push(createGhost(true));
+            }
+        }, 1500);
+    }
+
+    function updateEnemies(dt) {
+        const p = game.player;
+
+        // 1. 移動與邊界判定
+        game.ghosts.forEach(g => {
+            // [修改] 巨大化幽靈的追蹤邏輯
+            if (g.r > 50) {
+                // 如果半徑大於 50 (變大了)，開始追蹤玩家
+                const dx = p.x - g.x;
+                const dy = p.y - g.y;
+                const angle = Math.atan2(dy, dx);
+                // 速度稍慢，形成壓迫感
+                const speed = 45; 
+                g.vx = Math.cos(angle) * speed;
+                g.vy = Math.sin(angle) * speed;
+            }
+
+            g.x += g.vx * dt;
+            g.y += g.vy * dt;
+            
+            // 邊界判定：普通幽靈在右側反彈，巨大幽靈可跨越中線逼近玩家
+            if (g.r <= 50) {
+                if(g.x < WIDTH * 0.4 || g.x > WIDTH - 30) g.vx *= -1;
+                if(g.y < 30 || g.y > HEIGHT - 30) g.vy *= -1;
+            } else {
+                // 巨大幽靈只需限制上下邊界，左右不限制讓其逼近
+                if(g.y < g.r || g.y > HEIGHT - g.r) g.vy *= -1;
+            }
+            
+            if (g.hitFlash > 0) g.hitFlash -= dt;
+        });
+
+        // [新增] 幽靈融合機制：若碰到彼此，合體變大
+        for (let i = 0; i < game.ghosts.length; i++) {
+            for (let j = i + 1; j < game.ghosts.length; j++) {
+                const g1 = game.ghosts[i];
+                const g2 = game.ghosts[j];
+                
+                const dx = g1.x - g2.x;
+                const dy = g1.y - g2.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+
+                // 判定兩者接觸 (半徑之和)
+                if (dist < g1.r + g2.r) {
+                    // 計算融合後的新半徑 (面積疊加: r_new = sqrt(r1^2 + r2^2))
+                    // 設定最大上限 r=110，避免大到覆蓋整個畫面
+                    const newR = Math.min(110, Math.sqrt(g1.r * g1.r + g2.r * g2.r));
+                    
+                    // 讓 g1 變大，且血量疊加
+                    g1.r = newR;
+                    g1.hp += g2.hp; 
+                    
+                    // 稍微推移位置到兩者中間，讓融合看起來更自然
+                    g1.x = (g1.x + g2.x) / 2;
+                    g1.y = (g1.y + g2.y) / 2;
+                    
+                    // 特效
+                    game.effects.push(createEffect(g1.x, g1.y, "#c0d4ff", newR * 1.5));
+
+                    // 移除 g2
+                    game.ghosts.splice(j, 1);
+                    j--; // 因陣列長度改變，調整索引
+                }
+            }
+        }
+
+        if (game.boss) {
+            const b = game.boss;
+            b.y += b.vy * dt;
+            if (b.y < 80 || b.y > HEIGHT - 80) b.vy *= -1;
+
+            b.attackCooldown -= dt;
+            if (b.attackCooldown <= 0) {
+                game.attackProjectiles.push(createAttackProjectile(b.x - 40, b.y, p.x, p.y, 'beam'));
+                if(Math.random() < 0.35) {
+                     setTimeout(() => {
+                         if(game.state === 'level2' && game.boss && game.boss.hp > 0) 
+                             game.attackProjectiles.push(createAttackProjectile(b.x - 40, b.y, p.x, p.y, 'beam'));
+                     }, 200);
+                }
+                b.attackCooldown = randRange(1.2, 2.0);
+            }
+            if (b.hitFlash > 0) b.hitFlash -= dt;
+        }
+    }
+
+    function handleCollision() {
+        const p = game.player;
+        if (!p) return;
+        
+        for (let i = game.playerArrows.length - 1; i >= 0; i--) {
+            const arrow = game.playerArrows[i];
+            let arrowHit = false;
+
+            // 檢查：光束 vs 敵方子彈
+            for (let j = game.attackProjectiles.length - 1; j >= 0; j--) {
+                const atk = game.attackProjectiles[j];
+                const dx = arrow.x - atk.x;
+                const dy = arrow.y - atk.y;
+                if (Math.sqrt(dx*dx + dy*dy) < atk.r + 10) {
+                    game.effects.push(createEffect(atk.x, atk.y, "#fff")); 
+                    game.attackProjectiles.splice(j, 1);
+                    arrowHit = true;
+                    break;
+                }
+            }
+            if (arrowHit) {
+                game.playerArrows.splice(i, 1);
+                continue;
+            }
+
+            // 檢查：光束 vs 幽靈 (幽靈會阻擋光束)
+            for (let j = game.ghosts.length - 1; j >= 0; j--) {
+                const g = game.ghosts[j];
+                const dx = arrow.x - g.x;
+                const dy = arrow.y - g.y;
+                if (Math.sqrt(dx*dx + dy*dy) < g.r + 10) {
+                    // [修改] 擊中幽靈時扣血，而非直接消滅
+                    game.effects.push(createEffect(g.x, g.y, "#ff3b30")); 
+                    
+                    g.hp--; // 扣 HP
+                    g.hitFlash = 0.2; // 受傷閃爍
+                    arrowHit = true; // 光束被消耗
+
+                    // 只有血量歸零才移除
+                    if (g.hp <= 0) {
+                        game.ghosts.splice(j, 1);
+                        respawnGhost(); // 立即補充一個，保持數量
+                    } else {
+                        // 擊退效果：稍微往後推一點
+                        g.x += 15;
+                    }
+                    break;
+                }
+            }
+            if (arrowHit) {
+                game.playerArrows.splice(i, 1);
+                continue;
+            }
+
+            // [修改] 檢查：光束 vs 單字 (核心玩法邏輯修改)
+            for (let j = game.wordProjectiles.length - 1; j >= 0; j--) {
+                const w = game.wordProjectiles[j];
+                const tipX = arrow.x + arrow.w;
+                const tipY = arrow.y;
+                const dx = tipX - w.x;
+                const dy = tipY - w.y;
+                
+                if (Math.sqrt(dx*dx + dy*dy) < w.r + 20) {
+                    game.effects.push(createEffect(w.x, w.y, "#ffffff", 50)); 
+                    game.wordProjectiles.splice(j, 1);
+                    arrowHit = true;
+                    
+                    if (w.isCorrect) {
+                        // 射中正確答案 -> 觸發成功邏輯
+                        triggerCorrectAnswer(w.x, w.y);
+                    } else {
+                        // [修改] 射中錯誤答案 -> 扣血！
+                        game.hitEffectTime = 0.3;
+                        game.hp--;
+                        messageEl.textContent = "射錯了！這是錯誤的單字！";
+                        if(game.hp <= 0) gameOver();
+                    }
+                    break;
+                }
+            }
+            if (arrowHit) {
+                game.playerArrows.splice(i, 1);
+                continue;
+            }
+
+            // 檢查：光束 vs Boss
+            if (game.boss) {
+                const b = game.boss;
+                const dx = arrow.x - b.x;
+                const dy = arrow.y - b.y;
+                if (Math.sqrt(dx*dx + dy*dy) < b.r + 5) {
+                     b.hitFlash = 0.1;
+                     game.effects.push(createEffect(arrow.x, arrow.y, "#ffff00"));
+                     game.playerArrows.splice(i, 1);
+                     continue;
+                }
+            }
+        }
+
+        for (const g of game.ghosts) {
+            const dx = p.x - g.x;
+            const dy = p.y - g.y;
+            if(Math.sqrt(dx*dx + dy*dy) < g.r + 15) {
+                game.hp -= 1;
+                game.hitEffectTime = 0.3;
+                g.vx = -g.vx; 
+                g.x += 30; 
+                if(game.hp <= 0) gameOver();
+                return; 
+            }
+        }
+
+        if (game.boss) {
+            const b = game.boss;
+            const dx = p.x - b.x;
+            const dy = p.y - b.y;
+            if(Math.sqrt(dx*dx + dy*dy) < b.r + 15) {
+                game.hp -= 2;
+                game.hitEffectTime = 0.4;
+                p.x -= 60;
+                if(game.hp <= 0) gameOver();
+                return;
+            }
+        }
+
+        // 玩家身體 vs 單字的碰撞檢測已移除
+
+        for (let i = game.attackProjectiles.length - 1; i >= 0; i--) {
+            const atk = game.attackProjectiles[i];
+            const dx = p.x - atk.x;
+            const dy = p.y - atk.y;
+            if(Math.sqrt(dx*dx + dy*dy) < atk.r + 12) {
+                game.attackProjectiles.splice(i, 1);
+                game.hitEffectTime = 0.3;
+                game.hp -= (atk.type === 'beam' ? 2 : 1);
+                if(game.hp <= 0) gameOver();
+                return;
+            }
+        }
+    }
+
+    function update(dt) {
+        if (game.state !== "level1" && game.state !== "level2") return;
+
+        game.wordSpawnTimer -= dt;
+        const spawnInterval = game.level === 1 ? 1.4 : 1.2;
+        if(game.wordSpawnTimer <= 0) {
+            spawnWord();
+            game.wordSpawnTimer = spawnInterval;
+        }
+
+        // [新增] 幽靈自動增生邏輯
+        game.ghostSpawnTimer -= dt;
+        if (game.ghostSpawnTimer <= 0) {
+            // 設定幽靈最大數量上限，讓場面有足夠的阻礙但不會完全崩潰
+            const maxGhosts = game.level === 1 ? 8 : 12;
+            if (game.ghosts.length < maxGhosts) {
+                game.ghosts.push(createGhost(game.level === 2));
+            }
+            // 每 1.2 秒檢查並生成一次
+            game.ghostSpawnTimer = 1.2;
+        }
+
+        updateEnemies(dt);
+
+        const p = game.player;
+        if (p.attackCooldown > 0) p.attackCooldown -= dt;
+        
+        p.vx = 0; p.vy = 0;
+        if (keys["ArrowLeft"]) p.vx = -p.speed;
+        if (keys["ArrowRight"]) p.vx = p.speed;
+        if (keys["ArrowUp"]) p.vy = -p.speed;
+        if (keys["ArrowDown"]) p.vy = p.speed;
+
+        if (game.touchTarget) {
+            const dx = game.touchTarget.x - p.x;
+            const dy = game.touchTarget.y - p.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist > 10) {
+                p.vx = (dx / dist) * p.speed;
+                p.vy = (dy / dist) * p.speed;
+            }
+        }
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.x = Math.max(30, Math.min(WIDTH - 30, p.x));
+        p.y = Math.max(30, Math.min(HEIGHT - 30, p.y));
+
+        for (let i = game.playerArrows.length - 1; i >= 0; i--) {
+            const a = game.playerArrows[i];
+            a.x += a.vx * dt;
+            a.life -= dt;
+            if(a.life <= 0 || a.x > WIDTH) game.playerArrows.splice(i, 1);
+        }
+
+        for (let i = game.goldenWaves.length - 1; i >= 0; i--) {
+            const wave = game.goldenWaves[i];
+            
+            if (game.boss && game.boss.hp > 0) {
+                const targetX = game.boss.x;
+                const targetY = game.boss.y;
+                const angleToBoss = Math.atan2(targetY - wave.y, targetX - wave.x);
+                wave.vx = Math.cos(angleToBoss) * wave.speed;
+                wave.vy = Math.sin(angleToBoss) * wave.speed;
+                wave.angle = angleToBoss;
+            }
+
+            wave.x += wave.vx * dt;
+            wave.y += wave.vy * dt;
+            wave.life -= dt;
+
+            if (game.boss && game.boss.hp > 0) {
+                const b = game.boss;
+                const dx = wave.x - b.x;
+                const dy = wave.y - b.y;
+                if (Math.sqrt(dx*dx + dy*dy) < b.r + wave.r) {
+                    b.hp -= 1;
+                    b.hitFlash = 0.2; 
+                    game.effects.push(createEffect(b.x, b.y, "#ffd700", 80)); 
+                    game.goldenWaves.splice(i, 1);
+
+                    if (b.hp <= 0) {
+                        game.boss = null; 
+                        game.effects.push(createEffect(b.x, b.y, "#fff", 200)); 
+                        setTimeout(victory, 1000);
+                    }
+                    continue;
+                }
+            }
+
+            if(wave.life <= 0 || wave.x > WIDTH + 100) game.goldenWaves.splice(i, 1);
+        }
+
+        for (let i = game.effects.length - 1; i >= 0; i--) {
+            const e = game.effects[i];
+            e.r += 60 * dt; 
+            e.alpha -= 2.0 * dt; 
+            e.life -= dt;
+            if(e.life <= 0) game.effects.splice(i, 1);
+        }
+
+        [game.wordProjectiles, game.attackProjectiles].forEach(arr => {
+            for (let i = arr.length - 1; i >= 0; i--) {
+                const prj = arr[i];
+                prj.x += prj.vx * dt;
+                prj.y += prj.vy * dt;
+                prj.life -= dt;
+                if(prj.life <= 0 || prj.x < -50 || prj.x > WIDTH + 50 || prj.y < -50 || prj.y > HEIGHT + 50) {
+                    arr.splice(i, 1);
+                }
+            }
+        });
+
+        handleCollision();
+
+        if (game.flashTime > 0) game.flashTime -= dt;
+        if (game.hitEffectTime > 0) game.hitEffectTime -= dt;
+    }
+
+    // ====== 繪圖 ======
+    function draw() {
+        const grad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+        grad.addColorStop(0, "#141826");
+        grad.addColorStop(1, "#05060b");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+        // [新增] 詭異紅色月亮
+        ctx.save();
+        ctx.fillStyle = "#ff3333"; 
+        ctx.shadowBlur = 50;
+        ctx.shadowColor = "#ff0000";
+        ctx.beginPath();
+        ctx.arc(WIDTH * 0.8, HEIGHT * 0.2, 50, 0, Math.PI * 2); 
+        ctx.fill();
+        ctx.restore();
+
+        // 裝飾
+        ctx.fillStyle = "#1e2230";
+        ctx.fillRect(WIDTH * 0.85, 80, 80, HEIGHT - 160);
+
+        // [修改] 玩家射擊特效 - 科幻雷電光束
+        for (const a of game.playerArrows) {
+            ctx.save();
+            
+            // 1. 外層電弧 (主閃電)
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00eaff"; 
+            ctx.strokeStyle = "#ccf5ff";
+            ctx.lineWidth = 3;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            
+            ctx.beginPath();
+            ctx.moveTo(a.x, a.y);
+            
+            let lx = a.x;
+            let ly = a.y;
+            const segments = 6; // 將光束分為幾段閃電
+            const step = a.w / segments;
+            
+            for(let k=0; k < segments; k++) {
+                lx += step;
+                // 隨機 Y 軸偏移，製造電流跳動感 (每一幀都會變)
+                ly = a.y + (Math.random() - 0.5) * 20; 
+                ctx.lineTo(lx, ly);
+            }
+            ctx.stroke();
+            
+            // 2. 核心能量線 (保持直線感)
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#ffffff";
+            ctx.fillRect(a.x, a.y - 1, a.w, 2);
+
+            // 3. 次級散射電弧 (增加細節與不穩定感)
+            if(Math.random() < 0.7) { // 70% 機率出現第二條細閃電
+                ctx.beginPath();
+                ctx.strokeStyle = "#0099ff"; // 深一點的藍色
+                ctx.lineWidth = 1.5;
+                ctx.moveTo(a.x, a.y);
+                lx = a.x;
+                for(let k=0; k < segments; k++) {
+                   lx += step;
+                   ly = a.y + (Math.random() - 0.5) * 35; // 範圍更大的散射
+                   ctx.lineTo(lx, ly);
+                }
+                ctx.stroke();
+            }
+
+            ctx.restore();
+        }
+
+        for (const w of game.goldenWaves) {
+             ctx.save();
+             ctx.translate(w.x, w.y);
+             ctx.rotate(w.angle);
+             ctx.fillStyle = "#ffd700";
+             ctx.beginPath();
+             ctx.arc(0, 0, w.r, 0, Math.PI * 2);
+             ctx.fill();
+             // 拖尾效果
+             ctx.fillStyle = "rgba(255, 215, 0, 0.5)";
+             ctx.beginPath();
+             ctx.moveTo(0, -w.r);
+             ctx.lineTo(-60, 0);
+             ctx.lineTo(0, w.r);
+             ctx.fill();
+             ctx.restore();
+        }
+
+        for(const atk of game.attackProjectiles) {
+            ctx.save();
+            ctx.translate(atk.x, atk.y);
+            ctx.rotate(atk.rotation);
+            ctx.fillStyle = atk.color;
+            ctx.beginPath();
+            if (atk.type === 'fire') {
+                ctx.arc(0, 0, atk.r, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = "#ffff00"; 
+                ctx.beginPath(); ctx.arc(-2, -2, atk.r*0.5, 0, Math.PI*2); ctx.fill();
+            } else {
+                ctx.scale(1.5, 1);
+                ctx.arc(0, 0, atk.r, 0, Math.PI*2);
+                ctx.fillStyle = "#00ccff";
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#00ccff";
+                ctx.fill();
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath(); ctx.arc(0, 0, atk.r*0.6, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        ctx.font = "bold 24px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        
+        for(const prj of game.wordProjectiles) {
+            // 設定聖誕老人尺寸
+            const santaW = prj.r * 2.8; // 稍微加寬以容納雪橇
+            const santaH = 55; 
+
+            ctx.save();
+            ctx.translate(prj.x, prj.y);
+            
+            // 翻轉邏輯：SVG 預設面向右側
+            // 如果 vx < 0 (向左飛)，則水平翻轉
+            if (prj.vx < 0) {
+                 ctx.scale(-1, 1); 
+            }
+            // 繪製圖片，中心點對齊
+            ctx.drawImage(assets.santa, -santaW/2, -santaH/2, santaW, santaH);
+            ctx.restore();
+
+            // 繪製文字 (白色)
+            ctx.fillStyle = "#ffffff"; 
+            ctx.shadowBlur = 3;
+            ctx.shadowColor = "rgba(0,0,0,0.8)";
+            ctx.fillText(prj.text, prj.x, prj.y + 4); // 稍微往下移一點點
+            ctx.shadowBlur = 0;
+        }
+
+        for(const g of game.ghosts) {
+            ctx.save(); // [修改] 使用 ctx.save() 確保狀態不影響其他繪圖
+            ctx.globalAlpha = g.alpha;
+            
+            // [新增] 受傷閃爍效果
+            if (g.hitFlash > 0) {
+                // 使用 filter 製造受傷變色效果
+                ctx.filter = "brightness(200%) sepia(100%) hue-rotate(-50deg) saturate(600%)"; 
+            }
+
+            const size = g.r * 2.2; 
+            ctx.drawImage(assets.ghost, g.x - size/2, g.y - size/2, size, size);
+            
+            ctx.restore(); // [修改] 恢復繪圖狀態
+
+            // [新增] 顯示血量 (如果血量大於 1)
+            if (g.hp > 1) {
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 14px sans-serif";
+                ctx.shadowColor = "black";
+                ctx.shadowBlur = 2;
+                ctx.fillText(`HP: ${g.hp}`, g.x, g.y - g.r - 10);
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        if(game.boss && game.boss.hp > 0) {
+            const b = game.boss;
+            const size = b.r * 2.2;
+            
+            ctx.save();
+            if (b.hitFlash > 0) {
+                ctx.globalAlpha = 0.6; 
+                ctx.filter = "brightness(200%)";
+            }
+            
+            ctx.drawImage(assets.boss, b.x - size/2, b.y - size/2, size, size);
+            ctx.restore();
+
+            if (b.hitFlash > 0) {
+                 ctx.strokeStyle = "rgba(255,255,255,0.8)";
+                 ctx.lineWidth = 4;
+                 ctx.beginPath();
+                 ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI*2);
+                 ctx.stroke();
+            }
+        }
+
+        const p = game.player;
+        if(p) {
+            ctx.save();
+            const size = p.w * 1.2;
+            ctx.drawImage(assets.player, p.x - size/2, p.y - size/2, size, size);
+            ctx.restore();
+
+            if (game.touchTarget) {
+               ctx.strokeStyle = "rgba(255,255,255,0.3)";
+               ctx.beginPath(); ctx.moveTo(p.x, p.y);
+               ctx.lineTo(game.touchTarget.x, game.touchTarget.y); ctx.stroke();
+            }
+        }
+
+        for(const e of game.effects) {
+            ctx.globalAlpha = e.alpha;
+            ctx.fillStyle = e.color;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.r, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+
+        // 繪製 HP & Boss 血條
+        ctx.fillStyle = "#fff";
+        ctx.font = "14px sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(`HP: ${game.hp} / ${game.maxHp}`, 20, 30);
+        ctx.fillStyle = "#444";
+        ctx.fillRect(80, 18, 100, 12);
+        ctx.fillStyle = game.hp > 2 ? "#4cd964" : "#ff3b30";
+        ctx.fillRect(80, 18, 100 * (game.hp / game.maxHp), 12);
+
+        if (game.level === 2 && game.boss) {
+            const b = game.boss;
+            const barW = 200;
+            const barX = WIDTH/2 - barW/2;
+            const barY = 50;
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(barX, barY, barW, 10);
+            ctx.fillStyle = "#ff3333";
+            ctx.fillRect(barX, barY, barW * (Math.max(0,b.hp) / b.maxHp), 10);
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barW, 10);
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#fff";
+            ctx.fillText("魔王 HP", WIDTH/2, barY - 5);
+        }
+
+        if (game.hitEffectTime > 0) {
+            ctx.fillStyle = `rgba(255, 0, 0, ${game.hitEffectTime})`;
+            ctx.fillRect(0,0,WIDTH,HEIGHT);
+        }
+        if (game.flashTime > 0) {
+            ctx.fillStyle = `rgba(255, 255, 200, ${game.flashTime})`;
+            ctx.fillRect(0,0,WIDTH,HEIGHT);
+        }
+
+        if (game.state === "menu") {
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.fillRect(0,0,WIDTH,HEIGHT);
+            ctx.fillStyle = "#fff";
+            ctx.font = "30px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("勇者闖巨大化鬼屋", WIDTH/2, HEIGHT/2);
+            ctx.font = "16px sans-serif";
+            ctx.fillText("請按左方/上方按鈕開始", WIDTH/2, HEIGHT/2 + 40);
+        }
+    }
+
+    function loop(time) {
+        const dt = (time - game.lastTime) / 1000;
+        game.lastTime = time;
+        update(Math.min(dt, 0.1));
+        draw();
+        requestAnimationFrame(loop);
+    }
+    game.lastTime = performance.now();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
